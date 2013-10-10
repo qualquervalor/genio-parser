@@ -23,9 +23,11 @@ module Genio
     module Format
       autoload :Base,       'genio/parser/format/base'
       autoload :JsonSchema, 'genio/parser/format/json_schema'
+      autoload :Raml,       'genio/parser/format/raml'
       autoload :IODocs,     'genio/parser/format/iodocs'
       autoload :Wadl,       'genio/parser/format/wadl'
       autoload :Wsdl,       'genio/parser/format/wsdl'
+      autoload :Include,    'genio/parser/format/include'
     end
   end
 end
