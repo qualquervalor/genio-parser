@@ -1,5 +1,5 @@
 require 'open-uri'
-
+require 'uri'
 
 module Genio
   module Parser
@@ -23,14 +23,14 @@ module Genio
           @@base_url = base_url
         end
 
-	def to_s
-	  if @path.to_s =~ /^https?:/
-	    uri = @path.to_s
-	  else
-	    uri = File.join(File.dirname(@@base_url.to_s), @path.to_s)
-	  end
-	  return open(uri).read
-	end
+	    def to_s
+	      if @path.to_s =~ /^https?:/
+	       uri = @path.to_s
+	      else
+	       uri = URI.join(@@base_url.to_s, @path.to_s)
+	      end
+	      return open(uri).read
+	    end
 
       end
 
