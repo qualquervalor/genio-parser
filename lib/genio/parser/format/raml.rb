@@ -50,6 +50,9 @@ module Genio
 	      @schema
 	    end
 		
+        # Parse the given class_defintion under the class_name
+        # into the object model data_types
+        # returns the class_name
         def populate_datatype(class_name, class_def)
           #
 		  puts "Defining: " + class_name
@@ -58,12 +61,15 @@ module Genio
 		  class_name
         end
 		
+        # Alters data which is essentially a class_definition
+        # by filling in additional details in the object graph
+        # and wrapping the data into Types::DataType
+        # returns Types::DataType
         def parse_object(data)
           properties = Types::Base.new
           if data.properties
 		    data.properties.each do |name, property_def|
-              # property_name => property_type
-			  properties[name] = parse_object_properties(name, property_def)
+              properties[name] = parse_object_properties(name, property_def)
             end
           elsif data.type.is_a?(Array)
             data.type.each do |object|
@@ -74,62 +80,76 @@ module Genio
             uri = get_uri_from_ref(data.extends)
             class_name = form_class_name(uri)
 			if data_types[class_name] == nil
-			    puts data_types.keys
-                puts "Class name: " + class_name.inspect + " Extends Read from: " + uri
-			    read_file(uri) do |data|
-	              class_def = get_json_hash(data)
-				  data.extends = populate_datatype(class_name, class_def)
-                end
+              read_file(uri) do |data|
+                class_def = get_json_hash(data)
+                data.extends = populate_datatype(class_name, class_def)
+              end
+            else
+              data.extends = class_name
             end
           else
             data.extends = nil
+          end
+          if data.items
+            array_type = parse_object(data.items)
+            properties.merge!(array_type.properties)
+            data.extends ||= array_type.extends
+            data.array = true
           end
 		  data.properties = properties
           Types::DataType.new(data)
         end
 		
+		# Alters property_definition by filling
+        # additional details especially property type
+        # and wrapping the data into Types::Property
+        # returns Types::Property
         def parse_object_properties(name, property_def)
 		  property_def.array = true if property_def.type == 'array'
           property_def.type  =
-            if property_def["$ref"]               # Check the type is refer to another schema or not
-			  uri = get_uri_from_ref(property_def["$ref"])
-              class_name = form_class_name(uri)
-			  if data_types[class_name] == nil
-                puts "Class name: " + class_name + " Reference Read from: " + uri
-			    read_file(uri) do |data|
-	              class_def = get_json_hash(data)
-				  populate_datatype(class_name, class_def)
-				end
+            if property_def["$ref"]                    # Check the type is refer to another schema or not
+              if property_def['$ref'] != '#'
+                uri = get_uri_from_ref(property_def["$ref"])
+                class_name = form_class_name(uri)
+                parse_ref_types(uri, class_name)
+              else
+                'self'
               end
-            elsif property_def.additionalProperties and property_def.additionalProperties["$ref"]
-              #self.load(data.additionalProperties["$ref"])
-              uri = get_uri_from_ref(property_def.additionalProperties["$ref"])
-              class_name = form_class_name(uri)
-			  if data_types[class_name] == nil
-                puts "Class name: " + class_name + " Additional Read from: " + uri
-			    read_file(uri) do |data|
-	              class_def = get_json_hash(data)
-				  populate_datatype(class_name, class_def)
-                end
+			elsif property_def.additionalProperties and property_def.additionalProperties["$ref"]
+			  if property_def.additionalProperties['$ref'] != '#'
+                uri = get_uri_from_ref(property_def.additionalProperties["$ref"])
+                class_name = form_class_name(uri)
+                parse_ref_types(uri, class_name)
+              else
+                'self'
               end
-            elsif property_def.properties # Check the type has object definition or not
+            elsif property_def.properties              # Check the type has object definition or not
               class_name = form_class_name(name)
               populate_datatype(class_name, property_def)
             elsif property_def.type.is_a? Array
 			  property_def.union_types = property_def.type.map do |type|
                 parse_object(type)
               end
-              "object"
-            elsif property_def.items              # Parse array value type
+              'object'
+            elsif property_def.items                   # Parse array value type
               array_property = parse_object_properties(name, property_def.items)
               array_property.type
             else
-              property_def.type                   # Simple type
+              property_def.type                        # Simple type
             end
           Types::Property.new(property_def)
         rescue => error
           logger.error error.message
           Types::Property.new
+        end
+		
+        def parse_ref_types(uri, class_name)
+          if data_types[class_name] == nil
+            read_file(uri) do |data|
+	          class_def = get_json_hash(data)
+			  populate_datatype(class_name, class_def)
+            end
+          end
         end
 
         def parse_resource(key, resource)
