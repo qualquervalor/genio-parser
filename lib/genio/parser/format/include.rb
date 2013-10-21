@@ -11,8 +11,11 @@ module Genio
 
         @path
 
+        @file_name
+
         def init_with coder
           initialize(coder.scalar)
+          @file_name = coder.scalar
         end
 
         def initialize(path)
@@ -31,6 +34,10 @@ module Genio
 	      end
 	      return open(uri).read
 	    end
+
+        def get_file_name
+          @file_name
+        end
 
       end
 

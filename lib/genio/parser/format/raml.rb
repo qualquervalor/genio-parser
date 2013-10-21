@@ -22,14 +22,15 @@ module Genio
           read_file(@file_url) do |data|
 	        parse_file(data)
 	      end
-	    end
+		  #puts data_types.to_s
+		end
 
 	    def parse_file(data)
 	      @schema = YAML.load(data)
 	      self.endpoint = update_version_parameter
 	      @schema.each do |key, definition|
 	        if key =~ /^\//
-	          #parse_resource(key, definition)
+	          parse_resource(key, definition)
 			elsif key =~ /schema/
               #parse objects
               definition.each do |sch|
@@ -56,7 +57,7 @@ module Genio
         def populate_datatype(class_name, class_def)
           #
 		  puts "Defining: " + class_name
-          data_types[class_name] = {}
+		  data_types[class_name] = {}
           data_types[class_name] = parse_object(class_def)
 		  class_name
         end
@@ -66,7 +67,7 @@ module Genio
         # and wrapping the data into Types::DataType
         # returns Types::DataType
         def parse_object(data)
-          properties = Types::Base.new
+		  properties = Types::Base.new
           if data.properties
 		    data.properties.each do |name, property_def|
               properties[name] = parse_object_properties(name, property_def)
@@ -143,6 +144,9 @@ module Genio
           Types::Property.new
         end
 		
+        # Populate datatype model with the given
+        # uri for the reference type and the
+        # class name
         def parse_ref_types(uri, class_name)
           if data_types[class_name] == nil
             read_file(uri) do |data|
@@ -161,7 +165,8 @@ module Genio
 	          resource_name = key.split('/')[-2]
 	        end
 
-            case resource_key
+            resource_name = form_class_name(resource_name)
+			case resource_key
 
 	        when 'displayName'
               
@@ -169,23 +174,24 @@ module Genio
             when 'post'
 
 	          # parse post
-	          define_post(resource_name, resource_def)
+			  define_post(resource_name, resource_def, key)
             when 'get'
 
 	          # parse get
+			  define_get(resource_name, resource_def, key)
             else
 	      
 	          # default log
 	          if resource_key =~ /^\//
 	            # parse inner resource
-		        parse_resource(key.to_s + resource_key.to_s, resource_def)
+				parse_resource(key.to_s + resource_key.to_s, resource_def)
 	          end
 	        end
 	      end
 	    end
 
-	    def define_post(resource_name, resource_def)
-          resource_def.each do |post_key, post_def|
+	    def define_post(resource_name, resource_def, resource_path)
+		  resource_def.each do |post_key, post_def|
             case post_key
 
             when 'description'
@@ -196,20 +202,107 @@ module Genio
                 case body_key
                 when 'text/xml'
                     
-                  # puts 'to be implemented'
                 when 'application/json'
                   body_def.each do |json_key, json_def|
                     case json_key
                     when 'schema'
-                      puts "object name: " + form_class_name(resource_name)
-                      puts json_def.to_s
-                      puts "-----------------"
+                      class_name = form_class_name(resource_name)
+                      if defined? json_def.get_file_name
+                        class_name = form_class_name(json_def.get_file_name)
+                      end
+					  if data_types[class_name] == nil
+                        populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
+                      end
+                      service = create_service(resource_name, resource_def, resource_path)
+                      if services[resource_name]
+                        service.operations.merge!(services[resource_name].operations)
+                      end
+                      services[resource_name] = service
                     end
                   end
                 end
               end
             end
           end
+        end
+
+        def define_get(resource_name, resource_def, resource_path)
+		  resource_def.each do |get_key, get_def|
+            case get_key
+
+            when 'description'
+	            
+            # parse description			
+            when 'responses'
+              if resource_def['responses'][200]
+                resource_def['responses'][200].each do |response_key, response_body|
+                  case response_key
+                  when 'body'
+                    response_body.each do |body_key, body_def|
+                      case body_key
+                      when 'text/xml'
+                      
+                      when 'application/json'
+                        body_def.each do |json_key, json_def|
+                          case json_key
+                          when 'schema'
+                            class_name = form_class_name(resource_name)
+                            if defined? json_def.get_file_name
+                              class_name = form_class_name(json_def.get_file_name)
+                            end
+                            if data_types[class_name] == nil
+							  populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
+                            end
+                            service = create_service(resource_name, resource_def, resource_path)
+                            if services[resource_name]
+							  service.operations.merge!(services[resource_name].operations)
+                            end
+                            services[resource_name] = service
+                          end
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+		
+        def create_service(resource_name, resource_def, resource_path)
+          data = {}
+          if services[resource_name] != nil
+		    data = services[resource_name]
+          end
+          data['methods'] ||= {}
+		  data['methods'][resource_def['methodName']] ||= {}
+		  data['methods'][resource_def['methodName']]['relativePath'] = resource_path
+		  data['methods'][resource_def['methodName']]['path'] = File.join(self.endpoint.to_s, resource_path)
+          if resource_def['body'] && resource_def['body']['application/json'] && resource_def['body']['application/json']['schema']
+            class_name = form_class_name(resource_def['body']['application/json']['schema'].get_file_name)
+			if data_types[class_name] == nil
+              populate_datatype(class_name, JSON.parse(resource_def['body']['application/json']['schema'].to_s, :object_class => Types::Base, :max_nesting => 100))
+            end
+            data['methods'][resource_def['methodName']]['request_property'] = data_types[class_name]
+            data['methods'][resource_def['methodName']]['request'] = class_name
+          end
+          if resource_def['responses'] && resource_def['responses'][200] && resource_def['responses'][200]['body'] && resource_def['responses'][200]['body']['application/json'] && resource_def['responses'][200]['body']['application/json']['schema']
+		    class_name = form_class_name(resource_def['responses'][200]['body']['application/json']['schema'].get_file_name)
+			if data_types[class_name] == nil
+              populate_datatype(class_name, JSON.parse(resource_def['responses'][200]['body']['application/json']['schema'].to_s, :object_class => Types::Base, :max_nesting => 100))
+            end
+            data['methods'][resource_def['methodName']]['response_property'] = data_types[class_name]
+            data['methods'][resource_def['methodName']]['response'] = class_name
+		  end
+          if resource_def['queryParameters']
+            data['methods'][resource_def['methodName']]['queryParameters'] = {}
+            resource_def['queryParameters'].each do |name, query_def|
+              data['methods'][resource_def['methodName']]['queryParameters'][name] = query_def
+            end
+          end
+          data['operations'] = data['methods']
+		  puts data.to_s
+          Types::Service.new(data)
         end
 
 		def get_uri_from_ref(ref)
@@ -227,7 +320,6 @@ module Genio
 		
         def update_version_parameter
           @schema['baseUri'].gsub(/{version}/, @schema['version']) if @schema['baseUri'] =~ /{version}/
-          @schema['baseUri']
 		end
 		
         def get_json_hash(json)
