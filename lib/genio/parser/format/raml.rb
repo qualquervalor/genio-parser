@@ -22,7 +22,8 @@ module Genio
           read_file(@file_url) do |data|
 	        parse_file(data)
 	      end
-		  #puts data_types.to_s
+		  puts data_types.to_s
+		  puts services.to_s
 		end
 
 	    def parse_file(data)
@@ -174,11 +175,23 @@ module Genio
             when 'post'
 
 	          # parse post
-			  define_post(resource_name, resource_def, key)
+			  define_post(resource_key, resource_name, resource_def, key)
             when 'get'
 
 	          # parse get
-			  define_get(resource_name, resource_def, key)
+			  define_get(resource_key, resource_name, resource_def, key)
+            when 'put'
+
+	          # parse put
+			  define_put(resource_key, resource_name, resource_def, key)
+            when 'delete'
+
+	          # parse delete
+			  define_delete(resource_key, resource_name, resource_def, key)
+            when 'patch'
+
+	          # parse patch
+			  define_patch(resource_key, resource_name, resource_def, key)
             else
 	      
 	          # default log
@@ -190,7 +203,7 @@ module Genio
 	      end
 	    end
 
-	    def define_post(resource_name, resource_def, resource_path)
+	    def define_post(http_method, resource_name, resource_def, resource_path)
 		  resource_def.each do |post_key, post_def|
             case post_key
 
@@ -213,7 +226,7 @@ module Genio
 					  if data_types[class_name] == nil
                         populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
                       end
-                      service = create_service(resource_name, resource_def, resource_path)
+                      service = create_service(http_method, resource_name, resource_def, resource_path)
                       if services[resource_name]
                         service.operations.merge!(services[resource_name].operations)
                       end
@@ -226,7 +239,7 @@ module Genio
           end
         end
 
-        def define_get(resource_name, resource_def, resource_path)
+        def define_get(http_method, resource_name, resource_def, resource_path)
 		  resource_def.each do |get_key, get_def|
             case get_key
 
@@ -234,7 +247,7 @@ module Genio
 	            
             # parse description			
             when 'responses'
-              if resource_def['responses'][200]
+              if resource_def['responses'].has_key? 200
                 resource_def['responses'][200].each do |response_key, response_body|
                   case response_key
                   when 'body'
@@ -253,7 +266,7 @@ module Genio
                             if data_types[class_name] == nil
 							  populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
                             end
-                            service = create_service(resource_name, resource_def, resource_path)
+                            service = create_service(http_method, resource_name, resource_def, resource_path)
                             if services[resource_name]
 							  service.operations.merge!(services[resource_name].operations)
                             end
@@ -268,15 +281,107 @@ module Genio
             end
           end
         end
+
+        def define_put(http_method, resource_name, resource_def, resource_path)
+		  resource_def.each do |put_key, put_def|
+            case put_key
+
+            when 'description'
+	            
+			  #parse description
+            when 'body'
+              put_def.each do |body_key, body_def|
+                case body_key
+                when 'text/xml'
+                    
+                when 'application/json'
+                  body_def.each do |json_key, json_def|
+                    case json_key
+                    when 'schema'
+                      class_name = form_class_name(resource_name)
+                      if defined? json_def.get_file_name
+                        class_name = form_class_name(json_def.get_file_name)
+                      end
+					  if data_types[class_name] == nil
+                        populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
+                      end
+                      service = create_service(http_method, resource_name, resource_def, resource_path)
+                      if services[resource_name]
+                        service.operations.merge!(services[resource_name].operations)
+                      end
+                      services[resource_name] = service
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+
+        def define_delete(http_method, resource_name, resource_def, resource_path)
+		  resource_def.each do |delete_key, delete_def|
+            case delete_key
+
+            when 'description'
+	            
+			#parse description
+            when 'responses'
+			  if resource_def['responses'].has_key? 200
+			    service = create_service(http_method, resource_name, resource_def, resource_path)
+                if services[resource_name]
+				  service.operations.merge!(services[resource_name].operations)
+                end
+                services[resource_name] = service
+			  end
+            end
+          end
+        end
+
+        def define_patch(http_method, resource_name, resource_def, resource_path)
+		  resource_def.each do |patch_key, patch_def|
+            case patch_key
+
+            when 'description'
+	            
+			  #parse description
+            when 'body'
+              patch_def.each do |body_key, body_def|
+                case body_key
+                when 'text/xml'
+                    
+                when 'application/json'
+                  body_def.each do |json_key, json_def|
+                    case json_key
+                    when 'schema'
+                      class_name = form_class_name(resource_name)
+                      if defined? json_def.get_file_name
+                        class_name = form_class_name(json_def.get_file_name)
+                      end
+					  if data_types[class_name] == nil
+                        populate_datatype(class_name, JSON.parse(json_def.to_s, :object_class => Types::Base, :max_nesting => 100))
+                      end
+                      service = create_service(http_method, resource_name, resource_def, resource_path)
+                      if services[resource_name]
+                        service.operations.merge!(services[resource_name].operations)
+                      end
+                      services[resource_name] = service
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
 		
-        def create_service(resource_name, resource_def, resource_path)
-          data = {}
+        def create_service(http_method, resource_name, resource_def, resource_path)
+		  data = {}
           if services[resource_name] != nil
 		    data = services[resource_name]
           end
           data['methods'] ||= {}
 		  data['methods'][resource_def['methodName']] ||= {}
 		  data['methods'][resource_def['methodName']]['relativePath'] = resource_path
+		  data['methods'][resource_def['methodName']]['type'] = http_method
 		  data['methods'][resource_def['methodName']]['path'] = File.join(self.endpoint.to_s, resource_path)
           if resource_def['body'] && resource_def['body']['application/json'] && resource_def['body']['application/json']['schema']
             class_name = form_class_name(resource_def['body']['application/json']['schema'].get_file_name)
@@ -285,6 +390,9 @@ module Genio
             end
             data['methods'][resource_def['methodName']]['request_property'] = data_types[class_name]
             data['methods'][resource_def['methodName']]['request'] = class_name
+          else
+            data['methods'][resource_def['methodName']]['request_property'] = nil
+            data['methods'][resource_def['methodName']]['request'] = nil
           end
           if resource_def['responses'] && resource_def['responses'][200] && resource_def['responses'][200]['body'] && resource_def['responses'][200]['body']['application/json'] && resource_def['responses'][200]['body']['application/json']['schema']
 		    class_name = form_class_name(resource_def['responses'][200]['body']['application/json']['schema'].get_file_name)
@@ -293,6 +401,9 @@ module Genio
             end
             data['methods'][resource_def['methodName']]['response_property'] = data_types[class_name]
             data['methods'][resource_def['methodName']]['response'] = class_name
+          else
+            data['methods'][resource_def['methodName']]['response_property'] = nil
+            data['methods'][resource_def['methodName']]['response'] = nil
 		  end
           if resource_def['queryParameters']
             data['methods'][resource_def['methodName']]['queryParameters'] = {}
@@ -301,7 +412,7 @@ module Genio
             end
           end
           data['operations'] = data['methods']
-		  puts data.to_s
+		  #puts data.to_s
           Types::Service.new(data)
         end
 
