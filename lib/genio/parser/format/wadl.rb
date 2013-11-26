@@ -52,6 +52,17 @@ module Genio
               end
             end
           end
+          import_document.css("grammars include").each do |import|
+            if import.attr("href")
+              import_file = File.join(File.dirname(file), import.attr("href"))
+              logger.info "GET #{import_file}"
+              parent = document.css("grammars").first
+              if parent and parent.children.first
+                xml = Nokogiri::XML(open(import_file).read)
+                xml.children.each{|element| parent.children.first.before(element) }
+              end
+            end
+          end
 
           document
         end
