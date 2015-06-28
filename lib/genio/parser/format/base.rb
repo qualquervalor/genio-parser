@@ -24,7 +24,7 @@ module Genio
       class Base
         include Logging
 
-        attr_accessor :files, :services, :data_types, :enum_types, :options, :endpoint
+        attr_accessor :files, :services, :data_types, :enum_types, :options, :endpoint, :media_type
 
         def initialize(options = {})
           @options = options
